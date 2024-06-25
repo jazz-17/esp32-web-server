@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ESP Wi-Fi Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-blue-500 flex">
+    <div class="topnav flex">
+      <h1>ESP Wi-Fi Manager</h1>
+    </div>
+    <div class="flex bg-red-200 p-4">
+      <form action="/" method="POST">
+        <p>
+          <label for="ssid">SSID</label>
+          <input type="text" id="ssid" name="ssid" /><br />
+          <label for="password">Password</label>
+          <input type="text" id="password" name="password" /><br />
+          <input type="submit" value="Submit" />
+        </p>
+      </form>
+    </div>
+  </body>
+</html>
