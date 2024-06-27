@@ -1,213 +1,138 @@
-#include <Arduino.h>
-#include <SPIFFS.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <WiFi.h>
-#include <ArduinoJson.h>
+#include <WString.h>
+#include "esp_wifi.h"
+#include "Arduino.h"
+//#define LED 2
 
-#define BLUE_LED 2
+bool debugMode = false;
+String macList[100][3]; //macList stores MAC, timer & channel for up to 100 MACs
+String macList2[10][2] = {  
+  {"phoneee","24:D3:37:13:60:60"},
+  {"pcWifi","3C:95:09:BF:2F:57"},
+  {"pc1","3E:95:09:BF:2F:57"},
+  {"pc2","4E:95:09:BF:2F:57"},
+};
+int maxMacs  =  sizeof macList  / sizeof macList[0];
+int maxMacs2 =  sizeof macList2 / sizeof macList2[0];
 
-String ssid = "KIKI-1";
-String password = "andromeda_17089";
+int knownMacs = 0;
+int channel = 1;
+int timer = 60; // Set to 0 or less for infinite duration of entries
 
-const char *PARAM_INPUT_1 = "ssid";
-const char *PARAM_INPUT_2 = "password";
-const char *JSON_CONFIG_FILE = "/config.json";
-AsyncWebServer server(80);
+const wifi_promiscuous_filter_t filt={
+    .filter_mask=WIFI_PROMIS_FILTER_MASK_MGMT|WIFI_PROMIS_FILTER_MASK_DATA
+};
 
-// Timer variables
-unsigned long previousMillis = 0;
-const long interval = 10000; // interval to wait for Wi-Fi connection (milliseconds)
+typedef struct { 
+  uint8_t mac[6];
+} __attribute__((packed)) MacAddr;
 
-bool setupSPIFFS()
-{
-  // SPIFFS.format();
-  Serial.println("Mounting SPIFFS File System...");
+typedef struct { 
+  int16_t fctl;
+  int16_t duration;
+  MacAddr da;
+  MacAddr sa;
+  MacAddr bssid;
+  int16_t seqctl;
+  unsigned char payload[];
+} __attribute__((packed)) WifiMgmtHdr;
 
-  // May need to make it begin(true) first time you are using SPIFFS
-  if (SPIFFS.begin(false) || SPIFFS.begin(true))
-  {
-    Serial.println("SPIFFS mounted successfully");
-    return true;
+void sniffer(void* buf, wifi_promiscuous_pkt_type_t type) { 
+  int channel1 = channel;
+  wifi_promiscuous_pkt_t *p = (wifi_promiscuous_pkt_t*)buf;
+  int len = p->rx_ctrl.sig_len;
+  WifiMgmtHdr *wh = (WifiMgmtHdr*)p->payload;
+  len -= sizeof(WifiMgmtHdr);
+  if (len < 0) return;
+  String packet;
+  String mac;
+  String info;
+  int fctl = ntohs(wh->fctl);
+  for(int i=0;i<=20;i++){ // i <=  len
+     String hpay=String(p->payload[i],HEX);
+     if(hpay.length()==1)hpay="0"+hpay;
+     packet += hpay;
   }
-  Serial.println("Failed to mount SPIFFS filesystem");
-  return false;
-}
-
-bool getConfigData()
-{
-  if (!SPIFFS.exists(JSON_CONFIG_FILE))
-  {
-    Serial.println("The config file does not exist");
-    return false;
+  for(int i=10;i<=15;i++){ // extract MAC address 
+     String hpay=String(p->payload[i],HEX);
+     if(hpay.length()==1)hpay="0"+hpay;
+     mac += hpay;
+     if(i<15)mac+=":";
   }
-
-  Serial.println("Reading config file");
-  File configFile = SPIFFS.open(JSON_CONFIG_FILE, "r");
-  if (!configFile)
-  {
-    Serial.println("Failed to open config file");
-    return false;
-  }
-
-  Serial.println("Opened configuration file");
-  JsonDocument json;
-  DeserializationError error = deserializeJson(json, configFile);
-  serializeJsonPretty(json, Serial);
-  configFile.close();
-
-  if (error)
-  {
-    Serial.println("Failed to load json config");
-    return false;
-  }
-
-  Serial.println("Parsing JSON");
-  ssid = json["ssid"].as<String>();         // Convert JSON values to String
-  password = json["password"].as<String>(); // Convert JSON values to String
-  Serial.println("SSID: " + String(ssid));
-  Serial.println("Password: " + String(password));
-
-  return true;
-}
-
-bool getWifiConnection()
-{
-  Serial.println("Connecting to WiFi..");
-
-  if (ssid == "")
-  {
-    Serial.println("Undefined SSID");
-    return false;
-  }
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), password.c_str());
-
-  unsigned long startMillis = millis();
-
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    if (millis() - startMillis >= interval)
-    {
-      return false;
-    }
-
-    if ((millis() - startMillis) % 1000 == 0)
-    {
-      Serial.print(".");
-      delay(100); // Small delay to avoid spamming the serial output
+  mac.toUpperCase();
+  info="MAC = " + mac + " channel=" + channel1 + " in " + packet+"(...)";
+  int added = 0;
+  for(int i=0;i<=maxMacs;i++){ // check if MAC address is known
+    if(mac == macList[i][0]){ // if the MAC address is known, reset the time remaining 
+      macList[i][1] = String(timer);
+      added = 1;
     }
   }
-
-  Serial.println("Connected to the WiFi network");
-  digitalWrite(BLUE_LED, HIGH);
-  return true;
-}
-
-void writeConfigFile()
-{
-  Serial.println("Writting config file to SPIFFS");
-  JsonDocument json;
-  json["ssid"] = ssid.c_str();
-  json["password"] = password.c_str();
-
-  File configFile = SPIFFS.open(JSON_CONFIG_FILE, "w");
-  if (!configFile)
-  {
-    Serial.println("Failed to open config file for writing");
-  }
-
-  serializeJsonPretty(json, Serial);
-  if (serializeJson(json, configFile) == 0)
-  {
-    Serial.println(F("Failed to write to file"));
-  }
-  else
-  {
-    Serial.println(F("Config file saved successfully"));
-    Serial.print("SSID set to: ");
-    Serial.println(ssid);
-    Serial.print("Password set to: ");
-    Serial.println(password);
-  }
-  configFile.close();
-}
-
-void setup()
-{
-  Serial.begin(9600);
-  pinMode(BLUE_LED, OUTPUT);
-  digitalWrite(BLUE_LED, LOW);
-
-  if (!setupSPIFFS())
-  {
-    return;
-  }
-
-  if (getConfigData() && getWifiConnection())
-  {
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
-    Serial.print("Received request from client with IP: ");
-    Serial.println(request->client()->remoteIP());  
-                request->send(200, "text/plain", "hello world"); });
-
-    // Start server
-    Serial.println("Starting server...");
-    Serial.println(WiFi.localIP());
-    server.begin();
-  }
-  else
-  {
-    Serial.println("\nFailed to connect to WiFi. Initializing AP (Access Point).");
-
-    if (!WiFi.softAP("ESP32-AP", NULL))
-    {
-      Serial.println("AP failed to start");
-      return;
+  if(added == 0){ // Add new entry to the array if added==0
+    macList[knownMacs][0] = mac;
+    macList[knownMacs][1] = String(timer);
+    macList[knownMacs][2] = String(channel);
+    if (debugMode == true) 
+      Serial.println(info);
+    else     
+      Serial.printf("\r\n%d MACs detected.\r\n",knownMacs);
+    knownMacs ++;
+    if(knownMacs > maxMacs){
+      Serial.println("Warning: MAC overflow");
+      knownMacs = 0;
     }
-    Serial.println("AP SSID: ESP32-AP");
-    Serial.print("AP IP address: ");
-    Serial.println(WiFi.softAPIP());
+  }
+}
 
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(SPIFFS, "/admin.html", "text/html"); });
-    server.on("/toggle", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
-                digitalWrite(BLUE_LED, !digitalRead(BLUE_LED));
-                request->send(200, "text/plain", "toggle"); });
+void updateTimer(){ // update time remaining for each known device
+  for(int i=0;i<maxMacs;i++){
+    if(!(macList[i][0] == "")){
+      int newTime = (macList[i][1].toInt());
+      newTime --;
+      if(newTime <= 0){
+        macList[i][1] = String(timer);
+      }else{
+        macList[i][1] = String(newTime);
+      }
+    }
+  }
+}
 
-    server.on("/", HTTP_POST, [](AsyncWebServerRequest *request)
-              {
-
-      Serial.println("POST request received");
-      Serial.println("Initializing WiFi credentials configuration...");
-      int params = request->params();
-      for(int i=0;i<params;i++){
-        AsyncWebParameter* p = request->getParam(i);
-        if(p->isPost()){
-          //HTTP POST ssid value
-          if (p->name() == PARAM_INPUT_1) {
-            ssid = p->value().c_str();
-
-          }
-          //HTTP POST password value
-          if (p->name() == PARAM_INPUT_2) {
-            password = p->value().c_str();
-          }
-
-          Serial.printf("POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
+void showMyMACs(){ // show the MACs that are on both macList and macList2.
+  String res = "";
+  int counter=0;
+  for(int i=0;i<maxMacs;i++){
+    if(!(macList[i][0] == "")){
+      for(int j=0;j<maxMacs2;j++){
+        if(macList[i][0] == macList2[j][1]){
+          counter += 1;
+          res += (String(counter) +  ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
+          Serial.print("\r\n"+(String(counter) +  ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
+          //digitalWrite(LED, HIGH);
         }
       }
-    writeConfigFile();
-    request->send(200, "text/plain", "Done. ESP will restart");
-    delay(3000);
-    ESP.restart(); });
-
-    server.begin();
+    }
   }
 }
-void loop()
-{
+
+void setup() {
+  Serial.begin(115200);
+  wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  esp_wifi_init(&cfg);
+  esp_wifi_set_storage(WIFI_STORAGE_RAM);
+  esp_wifi_set_mode(WIFI_MODE_NULL);
+  esp_wifi_start();
+  esp_wifi_set_promiscuous(true);
+  esp_wifi_set_promiscuous_filter(&filt);
+  esp_wifi_set_promiscuous_rx_cb(&sniffer);
+  esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+  //pinMode(LED, OUTPUT);
+}
+
+void loop() {
+    if(channel > 14) channel = 1;
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    delay(1000);
+    if (timer>0) updateTimer();
+    if (debugMode == false) showMyMACs();
+    channel++;    
 }
