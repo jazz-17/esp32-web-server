@@ -1,7 +1,7 @@
 #include <WString.h>
 #include "esp_wifi.h"
 #include "Arduino.h"
-//#define LED 2
+#define LED 2
 
 bool debugMode = false;
 String macList[100][3]; //macList stores MAC, timer & channel for up to 100 MACs
@@ -107,7 +107,7 @@ void showMyMACs(){ // show the MACs that are on both macList and macList2.
           counter += 1;
           res += (String(counter) +  ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
           Serial.print("\r\n"+(String(counter) +  ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
-          //digitalWrite(LED, HIGH);
+          digitalWrite(LED, HIGH);
         }
       }
     }
@@ -125,7 +125,7 @@ void setup() {
   esp_wifi_set_promiscuous_filter(&filt);
   esp_wifi_set_promiscuous_rx_cb(&sniffer);
   esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-  //pinMode(LED, OUTPUT);
+  pinMode(LED, OUTPUT);
 }
 
 void loop() {
