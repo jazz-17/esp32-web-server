@@ -1,0 +1,15 @@
+{
+  "name": "esp32-server",
+  "version": "1.0.1",
+  "description": "web server for esp32",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server"
+  },
+  "type": "module",
+
+  "dependencies": {
+    "express": "^4.18.2",
+    "oracledb": "^6.5.1"
+  }
+}
