@@ -2,18 +2,19 @@
 
 bool debugMode = false;
 String macList[100][3]; // macList stores MAC, timer & channel for up to 100 MACs
-String macList2[10][2] = {
-    {"phoneee", "24:D3:37:13:60:60"},
-    {"pcWifi", "3C:95:09:BF:2F:57"},
-    {"pc1", "3E:95:09:BF:2F:57"},
-    {"pc2", "4E:95:09:BF:2F:57"},
+String macList2[10][3] = {
+    {"mi_celular", "24:D3:37:13:60:60", "0"},
+    {"mi_laptop", "3C:95:09:BF:2F:57", "0"},
+    {"pc1", "3E:95:09:BF:2F:57", "0"},
+    {"pc2", "4E:95:09:BF:2F:57", "0"},
 };
 int maxMacs = sizeof macList / sizeof macList[0];
 int maxMacs2 = sizeof macList2 / sizeof macList2[0];
 
 int knownMacs = 0;
 int channel = 1;
-int timer = 60; // Set to 0 or less for infinite duration of entries
+// int timer = 60; // Set to 0 or less for infinite duration of entries
+int timer = 0; // Set to 0 or less for infinite duration of entries
 
 const wifi_promiscuous_filter_t filt = {
     .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};
@@ -81,8 +82,8 @@ void sniffer(void *buf, wifi_promiscuous_pkt_type_t type)
         if (debugMode == true)
             Serial.println(info);
         else
-            Serial.printf("\r\n%d MACs detectados.\r\n", knownMacs);
-        knownMacs++;
+            // Serial.printf("\r\n%d MACs detectados.\r\n", knownMacs);
+            knownMacs++;
         if (knownMacs > maxMacs)
         {
             Serial.println("Advertencia: MAC overflow");
@@ -124,8 +125,49 @@ void showMyMACs()
                 if (macList[i][0] == macList2[j][1])
                 {
                     counter += 1;
-                    res += (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
-                    Serial.print("\r\n" + (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
+
+                    // res += (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
+                    // Serial.print("\r\n" + (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
+                    if (macList2[j][2] == "0")
+                    {
+                        Serial.println("Alumno detectado");
+                        res += (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
+                        Serial.print("\r\n" + (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
+                        // Check WiFi connection status
+                        if (WiFi.status() == WL_CONNECTED)
+                        {
+                            Serial.print("Making request...");
+                            WiFiClient client;
+                            HTTPClient http;
+                            String serverPath = SERVER_URL;
+                            http.begin(client, serverPath.c_str());
+                            http.addHeader("Content-Type", "application/json");
+
+                            // Construct JSON payload with the actual MAC address
+                            String jsonPayload = "{\"macAddress\":\"" + macList2[j][1] + "\"}";
+
+                            // Send HTTP POST request with JSON payload
+                            int httpResponseCode = http.POST(jsonPayload);
+
+                            if (httpResponseCode > 0)
+                            {
+                                Serial.print("HTTP Response code: ");
+                                Serial.println(httpResponseCode);
+
+                                String payload = http.getString();
+                                Serial.print("Payload: ");
+                                Serial.println(payload);
+                            }
+                            else
+                            {
+                                Serial.print("Error code: ");
+                                Serial.println(httpResponseCode);
+                            }
+                            // Free resources
+                            http.end();
+                            macList2[j][2] = "1";
+                        }
+                    }
                 }
             }
         }

@@ -1,3 +1,6 @@
+
+//////////////////////////////
+// PARIONA NO QUIERE ESTO >:(
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <AsyncTCP.h>

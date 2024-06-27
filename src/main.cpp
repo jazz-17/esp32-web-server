@@ -1,9 +1,12 @@
 #include "mac_sniffer.h"
-#include <WiFi.h>
 
-#define WIFI_SSID "KIKI-1"
-#define WIFI_PASSWORD "andromeda_1708"
-#define SERVER_URL "http://192.168.0.15:3000/";
+
+
+unsigned long lastTime = 0;
+// 10 minutos 600000;
+// 5 segundos 5000
+unsigned long timerDelay = 10000;
+
 #define LED 2
 
 void setup()
@@ -17,6 +20,7 @@ void setup()
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     Serial.println("iniciando");
+    Serial.println("Escaneando MACs...");
 }
 
 bool isConnected = false;
@@ -26,19 +30,27 @@ void loop()
     // wifi code
     if (WiFi.status() == WL_CONNECTED && !isConnected)
     {
-        Serial.println("Conectado");
+        Serial.print("Conectado a red WiFi con IP: ");
+        Serial.println(WiFi.localIP());
         digitalWrite(LED, HIGH);
         isConnected = true;
     }
-    if (WiFi.status() != WL_CONNECTED)
+    else if (WiFi.status() != WL_CONNECTED && isConnected)
+    {
+        Serial.println("Desconectado de red WiFi");
+        digitalWrite(LED, LOW);
+        isConnected = false;
+    }
+    else if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println(".");
         digitalWrite(LED, !digitalRead(LED));
         delay(750);
-        isConnected = false;
     }
 
-    // mac code
+
+
+    // macsniffer code
     if (channel > 14)
         channel = 1;
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);

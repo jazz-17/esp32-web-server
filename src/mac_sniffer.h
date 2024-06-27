@@ -4,7 +4,15 @@
 
 #include "esp_wifi.h"
 #include <WString.h>
+#include <WiFi.h>
 #include "Arduino.h"
+#include <HTTPClient.h>
+
+
+#define WIFI_SSID "KIKI-1"
+//#define WIFI_SSID "KIKI-portable"
+#define WIFI_PASSWORD "andromeda_1708"
+#define SERVER_URL "http://192.168.0.15:3000/";
 
 // Function declarations
 void setupMacSniffer();
