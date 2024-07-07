@@ -1,6 +1,8 @@
 #include "mac_sniffer.h"
+#include "network_config.h"
 
 bool debugMode = false;
+
 String macList[100][3]; // macList stores MAC, timer & channel for up to 100 MACs
 String macList2[10][3] = {
     {"mi_celular", "24:D3:37:13:60:60", "0"},
@@ -81,9 +83,9 @@ void sniffer(void *buf, wifi_promiscuous_pkt_type_t type)
         macList[knownMacs][2] = String(channel);
         if (debugMode == true)
             Serial.println(info);
-        else
-            // Serial.printf("\r\n%d MACs detectados.\r\n", knownMacs);
-            knownMacs++;
+        // else
+        //     Serial.printf("\r\n%d MACs detectados.\r\n", knownMacs);
+        knownMacs++;
         if (knownMacs > maxMacs)
         {
             Serial.println("Advertencia: MAC overflow");
@@ -112,7 +114,7 @@ void updateTimer()
     }
 }
 
-void showMyMACs()
+void findMyMACs()
 { // show the MACs that are on both macList and macList2.
     String res = "";
     int counter = 0;
@@ -126,20 +128,23 @@ void showMyMACs()
                 {
                     counter += 1;
 
-                    // res += (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
-                    // Serial.print("\r\n" + (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
                     if (macList2[j][2] == "0")
                     {
-                        Serial.println("Alumno detectado");
+                        if (!debugMode)
+                        {
+                            Serial.println("Alumno detectado...");
+                            Serial.println("Esperando conexión de red para registrar asistencia...");
+                        }
                         res += (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n");
                         Serial.print("\r\n" + (String(counter) + ". MAC=" + macList[i][0] + "  ALIAS=" + macList2[j][0] + "  Channel=" + macList[i][2] + "  Timer=" + macList[i][1] + "\r\n"));
                         // Check WiFi connection status
-                        if (WiFi.status() == WL_CONNECTED)
+                        if (WiFi.status() == WL_CONNECTED && !debugMode)
                         {
-                            Serial.print("Making request...");
+                            Serial.println("Registrando asistencia...");
                             WiFiClient client;
                             HTTPClient http;
-                            String serverPath = SERVER_URL;
+                            String serverIP = SERVER_IP;
+                            String serverPath = "http://" + serverIP + "/ingresar-asistencia";
                             http.begin(client, serverPath.c_str());
                             http.addHeader("Content-Type", "application/json");
 
@@ -155,7 +160,7 @@ void showMyMACs()
                                 Serial.println(httpResponseCode);
 
                                 String payload = http.getString();
-                                Serial.print("Payload: ");
+                                Serial.print("Respuesta: ");
                                 Serial.println(payload);
                             }
                             else
@@ -184,5 +189,12 @@ void setupMacSniffer()
     esp_wifi_set_promiscuous(true);
     esp_wifi_set_promiscuous_filter(&filt);
     esp_wifi_set_promiscuous_rx_cb(&sniffer);
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+}
+void esp_goto_next_channel()
+{
+    channel++;
+    if (channel > 14)
+        channel = 1;
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 }

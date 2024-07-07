@@ -100,9 +100,15 @@ VALUES ('Piero (celular)', 'Doe', '24:D3:37:13:60:60');
 INSERT INTO Alumno (nombre, apellido, mac_address)
 VALUES ('Diego (laptop)', 'Smith', '3C:95:09:BF:2F:57');
 
--- Insert into Asistencia table
-INSERT INTO Asistencia (alumno_id, fecha, status)
-VALUES (1, TO_DATE('27-06-2024', 'DD-MM-YYYY'), 'Presente');
+INSERT INTO Alumno (nombre, apellido, mac_address)
+VALUES ('Juan', 'Perez', '62:FF:09:BF:2F:57');
 
-INSERT INTO Asistencia (alumno_id, fecha, status)
-VALUES (2, TO_DATE('27-06-2024', 'DD-MM-YYYY'), 'Ausente');
+INSERT INTO Alumno (nombre, apellido, mac_address)
+VALUES ('Pedro', 'A', '12:9F:DE:10:41:75');
+
+-- Insert into Asistencia table
+-- INSERT INTO Asistencia (alumno_id, fecha, status)
+-- VALUES (1, TO_DATE('27-06-2024', 'DD-MM-YYYY'), 'Presente');
+
+-- INSERT INTO Asistencia (alumno_id, fecha, status)
+-- VALUES (2, TO_DATE('27-06-2024', 'DD-MM-YYYY'), 'Ausente');

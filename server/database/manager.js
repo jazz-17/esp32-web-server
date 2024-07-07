@@ -5,6 +5,7 @@ const dbConfig = {
   password: "123",
   connectString: "localhost/xepdb1",
 };
+// curl -X POST   -H "Content-Type: application/json"   -d '{"macAddress": "24:D3:37:13:60:60"}'   http://localhost:3000/
 class DatabaseManager {
   async startDatabaseConn() {
     try {
@@ -49,20 +50,38 @@ class DatabaseManager {
 
       const alumnoId = result.rows[0][0]; // Assuming alumno_id is in the first column
 
+      // Check if attendance already exists for this alumno_id
+      const checkAttendanceQuery = `
+        SELECT COUNT(*)
+        FROM Asistencia
+        WHERE alumno_id = :alumno_id
+        AND fecha = TRUNC(SYSDATE)`; // Check for today's date
+
+      const checkResult = await connection.execute(checkAttendanceQuery, [
+        alumnoId,
+      ]);
+      const attendanceCount = checkResult.rows[0][0];
+
+      if (attendanceCount > 0) {
+        console.log(
+          `Ya existe un registro de asistencia para el alumno con código ${alumnoId} hoy.`
+        );
+        return;
+      }
+
       // Insert into Asistencia table
       const insertQuery = `
         INSERT INTO Asistencia (alumno_id, fecha, status)
-        VALUES (:alumno_id, SYSDATE, 'Presente')`; // SYSDATE for current date
+        VALUES (:alumno_id, TRUNC(SYSDATE), 'Presente')`; // SYSDATE for current date
 
       await connection.execute(insertQuery, [alumnoId]);
 
-      console.log("Attendance record inserted successfully.");
+      console.log("Registro de asistencia creado exitosamente.");
 
       // Commit the transaction
       await connection.commit();
-      console.log("Changes committed successfully.");
     } catch (err) {
-      console.error("Error registering attendance:", err);
+      console.log("Error al registrar asistencia:", err);
       throw err; // Rethrow the error to handle it in the caller function
     } finally {
       if (connection) {
@@ -70,7 +89,7 @@ class DatabaseManager {
           await connection.close();
           console.log("Connection closed.");
         } catch (err) {
-          console.error("Error closing connection:", err);
+          console.log("Error closing connection:", err);
         }
       }
     }
@@ -80,9 +99,6 @@ class DatabaseManager {
     let connection;
     try {
       connection = await oracle.getConnection(dbConfig);
-
-      // Get current date
-      const currentDate = new Date().toISOString().slice(0, 10);
 
       // Query to fetch all students
       const query = `
@@ -99,11 +115,10 @@ class DatabaseManager {
           SELECT COUNT(*) AS count
           FROM Asistencia
           WHERE alumno_id = :alumno_id
-            AND fecha = TO_DATE(:current_date, 'YYYY-MM-DD')`;
+            AND fecha = TRUNC(SYSDATE)`;
 
         const checkResult = await connection.execute(checkAttendanceQuery, [
           alumnoId,
-          currentDate,
         ]);
 
         const attendanceExists = checkResult.rows[0][0] > 0;
@@ -112,21 +127,21 @@ class DatabaseManager {
           // Insert absence record for today
           const insertQuery = `
             INSERT INTO Asistencia (alumno_id, fecha, status)
-            VALUES (:alumno_id, TO_DATE(:current_date, 'YYYY-MM-DD'), 'Ausente')`;
+            VALUES (:alumno_id, TRUNC(SYSDATE), 'Ausente')`;
 
-          await connection.execute(insertQuery, [alumnoId, currentDate]);
+          await connection.execute(insertQuery, [alumnoId]);
 
           console.log(
-            `Marked student with alumno_id ${alumnoId} as Ausente for ${currentDate}`
+            `Alumno con código ${alumnoId} marcado como Ausente por el día de hoy`
           );
         }
       }
 
       // Commit the transaction
       await connection.commit();
-      console.log("Attendance closed successfully for today.");
+      console.log("Asistencias de hoy cerradas.");
     } catch (err) {
-      console.error("Error closing attendance:", err);
+      console.error("Error al cerrar asistencias:", err);
       throw err; // Rethrow the error to handle it in the caller function
     } finally {
       if (connection) {
