@@ -154,5 +154,61 @@ class DatabaseManager {
       }
     }
   }
+
+  async guardarRespuestas(data) {
+    const { pregunta, respuesta } = data;
+    let connection;
+    try {
+      connection = await oracle.getConnection(dbConfig);
+
+      const insertQuery = `
+        INSERT INTO respuestas (pregunta, respuesta)
+        VALUES (:pregunta, :respuesta)`;
+
+      await connection.execute(insertQuery, [pregunta, respuesta]);
+
+      console.log("Respuestas guardadas correctamente.");
+
+      // Commit the transaction
+      await connection.commit();
+    } catch (err) {
+      console.error("Error al guardar respuestas:", err);
+      throw err; // Rethrow the error to handle it in the caller function
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+          console.log("Connection closed.");
+        } catch (err) {
+          console.error("Error closing connection:", err);
+        }
+      }
+    }
+  }
+
+  async obtenerResultados() {
+    let connection;
+    try {
+      connection = await oracle.getConnection(dbConfig);
+
+      const query = "SELECT id, pregunta, respuesta FROM respuestas";
+
+      const result = await connection.execute(query);
+
+      return result.rows;
+    } catch (err) {
+      console.error("Error al obtener resultados:", err);
+      throw err; // Rethrow the error to handle it in the caller function
+    } finally {
+      if (connection) {
+        try {
+          await connection.close();
+          console.log("Connection closed.");
+        } catch (err) {
+          console.error("Error closing connection:", err);
+        }
+      }
+    }
+  }
 }
 export default DatabaseManager;

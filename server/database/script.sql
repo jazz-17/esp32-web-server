@@ -1,3 +1,6 @@
+-------------------------------------------
+-- ASISTENCIA SCRIPT
+-------------------------------------------
 -- Drop sequences if they exist
 BEGIN
     EXECUTE IMMEDIATE 'DROP SEQUENCE alumno_seq';
@@ -90,6 +93,97 @@ BEGIN
     SELECT asistencia_seq.NEXTVAL
     INTO :new.asistencia_id
     FROM dual;
+END;
+/
+
+-------------------------------------------
+-- EXAMEN SCRIPT
+-------------------------------------------
+-- Drop tables if they exist
+BEGIN
+   EXECUTE IMMEDIATE 'DROP TABLE asistencia CASCADE CONSTRAINTS';
+EXCEPTION
+   WHEN OTHERS THEN
+      IF SQLCODE != -942 THEN
+         RAISE;
+      END IF;
+END;
+/
+
+BEGIN
+   EXECUTE IMMEDIATE 'DROP TABLE respuestas CASCADE CONSTRAINTS';
+EXCEPTION
+   WHEN OTHERS THEN
+      IF SQLCODE != -942 THEN
+         RAISE;
+      END IF;
+END;
+/
+
+-- Drop sequences if they exist
+BEGIN
+   EXECUTE IMMEDIATE 'DROP SEQUENCE asistencia_seq';
+EXCEPTION
+   WHEN OTHERS THEN
+      IF SQLCODE != -2289 THEN
+         RAISE;
+      END IF;
+END;
+/
+
+BEGIN
+   EXECUTE IMMEDIATE 'DROP SEQUENCE respuestas_seq';
+EXCEPTION
+   WHEN OTHERS THEN
+      IF SQLCODE != -2289 THEN
+         RAISE;
+      END IF;
+END;
+/
+
+-- Create sequences
+CREATE SEQUENCE asistencia_seq
+   START WITH 1
+   INCREMENT BY 1
+   NOCACHE
+   NOCYCLE;
+
+CREATE SEQUENCE respuestas_seq
+   START WITH 1
+   INCREMENT BY 1
+   NOCACHE
+   NOCYCLE;
+
+-- Create asistencia table
+CREATE TABLE asistencia (
+   id NUMBER PRIMARY KEY,
+   mac_address VARCHAR2(255) NOT NULL,
+   fecha DATE DEFAULT SYSDATE,
+   CONSTRAINT asistencia_mac_address_uk UNIQUE (mac_address, fecha)
+);
+
+-- Create respuestas table
+CREATE TABLE respuestas (
+   id NUMBER PRIMARY KEY,
+   pregunta VARCHAR2(255) NOT NULL,
+   respuesta VARCHAR2(255) NOT NULL
+);
+
+-- Create trigger for asistencia table
+CREATE OR REPLACE TRIGGER asistencia_before_insert
+BEFORE INSERT ON asistencia
+FOR EACH ROW
+BEGIN
+   SELECT asistencia_seq.NEXTVAL INTO :NEW.id FROM dual;
+END;
+/
+
+-- Create trigger for respuestas table
+CREATE OR REPLACE TRIGGER respuestas_before_insert
+BEFORE INSERT ON respuestas
+FOR EACH ROW
+BEGIN
+   SELECT respuestas_seq.NEXTVAL INTO :NEW.id FROM dual;
 END;
 /
 

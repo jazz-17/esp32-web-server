@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Resultados del Examen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+      table {
+        width: 50%;
+        border-collapse: collapse;
+        margin: 50px 0;
+        font-size: 18px;
+        text-align: left;
+      }
+      th,
+      td {
+        padding: 12px;
+        border-bottom: 1px solid #ddd;
+      }
+    </style>
+  </head>
+  <body class="h-[100dvh] flex justify-center items-center flex-col">
+    <h1 class="font-semibold text-2xl py-8">Resultados del Examen</h1>
+    <div class="flex flex-grow">
+<div>
+  <table border="1">
+    <tr>
+      <th>ID</th>
+      <th>Pregunta</th>
+      <th>Respuesta</th>
+    </tr>
+    <tbody id="resultados">
+      <!-- Los resultados se insertarán aquí mediante JavaScript -->
+    </tbody>
+  </table>
+</div>
+    </div>
+    <script>
+      // Cargar resultados desde Node.js
+      fetch("http://localhost:3000/examen/resultados")
+        .then((response) => response.json())
+        .then((data) => {
+          console.log("Resultados:", data);
+          const resultados = document.getElementById("resultados");
+          data.forEach((row) => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+            <td>${row[0]}</td>
+            <td>${row[1]}</td>
+            <td>${row[2]}</td>
+          `;
+            resultados.appendChild(tr);
+          });
+        })
+        .catch((error) =>
+          console.error("Error al cargar los resultados:", error)
+        );
+    </script>
+  </body>
+</html>

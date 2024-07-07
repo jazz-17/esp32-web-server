@@ -1,5 +1,5 @@
 // #include "mac_sniffer.h"
-// #include "network_config.h"
+#include "network_config.h"
 
 // #define LED 2
 
@@ -10,7 +10,7 @@
 //     digitalWrite(LED, LOW);
 
 //     setupMacSniffer();
-    
+
 //     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 //     Serial.println("iniciando");
 //     Serial.println("Escaneando MACs...");
@@ -64,41 +64,40 @@ void registrarRespuesta(String respuesta);
 void enviarRespuesta(int pregunta, String respuesta);
 void mostrarResultados();
 
-const char* ssid = "KIKI_1";
-const char* password = "andromeda_1708";
-//const char* serverName = "http://tu_dominio.com/guardar_respuesta.php";
-const char* serverName = "http://proyecto.test/guardar_respuesta.php";
+const char *ssid = "KIKI-1";
+const char *password = "andromeda_1708";
+// const char* serverName = "http://tu_dominio.com/guardar_respuesta.php";
+const char *serverName = "http://proyecto.test/guardar_respuesta.php";
 
-const char* preguntas[] = {
-  "Pregunta 1",
-  "Pregunta 2",
-  "Pregunta 3",
-  "Pregunta 4",
-  "Pregunta 5",
-  "Pregunta 6",
-  "Pregunta 7",
-  "Pregunta 8",
-  "Pregunta 9",
-  "Pregunta 10"
-};
+const char *preguntas[] = {
+    "Pregunta 1",
+    "Pregunta 2",
+    "Pregunta 3",
+    "Pregunta 4",
+    "Pregunta 5",
+    "Pregunta 6",
+    "Pregunta 7",
+    "Pregunta 8",
+    "Pregunta 9",
+    "Pregunta 10"};
 
-const char* opciones[] = {
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D",
-  "A B C D"
-};
+const char *opciones[] = {
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D",
+    "A B C D"};
 
 int preguntaActual = 0;
 String respuestas[10];
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
   lcd.init();
@@ -109,7 +108,8 @@ void setup() {
   pinMode(BUTTON_D, INPUT_PULLUP);
 
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.println("Conectando a WiFi...");
   }
@@ -119,12 +119,16 @@ void setup() {
   mostrarPregunta();
 }
 
-void loop() {
-  manejarPulsaciones();
-  delay(100);
+void loop()
+{
+  //manejarPulsaciones();
+  enviarRespuesta(preguntaActual, "A");
+  delay(5000);
+  preguntaActual++;
 }
 
-void mostrarPregunta() {
+void mostrarPregunta()
+{
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(preguntas[preguntaActual]);
@@ -132,19 +136,28 @@ void mostrarPregunta() {
   lcd.print(opciones[preguntaActual]);
 }
 
-void manejarPulsaciones() {
-  if (digitalRead(BUTTON_A) == LOW) {
+void manejarPulsaciones()
+{
+  if (digitalRead(BUTTON_A) == LOW)
+  {
     registrarRespuesta("A");
-  } else if (digitalRead(BUTTON_B) == LOW) {
+  }
+  else if (digitalRead(BUTTON_B) == LOW)
+  {
     registrarRespuesta("B");
-  } else if (digitalRead(BUTTON_C) == LOW) {
+  }
+  else if (digitalRead(BUTTON_C) == LOW)
+  {
     registrarRespuesta("C");
-  } else if (digitalRead(BUTTON_D) == LOW) {
+  }
+  else if (digitalRead(BUTTON_D) == LOW)
+  {
     registrarRespuesta("D");
   }
 }
 
-void registrarRespuesta(String respuesta) {
+void registrarRespuesta(String respuesta)
+{
   Serial.print("Respuesta ");
   Serial.print(respuesta);
   Serial.println(" seleccionada");
@@ -161,43 +174,62 @@ void registrarRespuesta(String respuesta) {
   enviarRespuesta(preguntaActual + 1, respuesta);
 
   preguntaActual++;
-  if (preguntaActual < 10) {
+  if (preguntaActual < 10)
+  {
     mostrarPregunta();
-  } else {
+  }
+  else
+  {
     mostrarResultados();
   }
 }
 
-void enviarRespuesta(int pregunta, String respuesta) {
-  if (WiFi.status() == WL_CONNECTED) {
+void enviarRespuesta(int pregunta, String respuesta)
+{
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    Serial.println("Registrando asistencia...");
+    WiFiClient client;
     HTTPClient http;
-    http.begin(serverName);
-    http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+    String serverIP = SERVER_IP;
+    String serverPath = "http://" + serverIP + "/examen/guardar-respuesta";
+    http.begin(client, serverPath.c_str());
+    http.addHeader("Content-Type", "application/json");
 
-    String httpRequestData = "pregunta=" + String(pregunta) + "&respuesta=" + respuesta;
-    int httpResponseCode = http.POST(httpRequestData);
+    String jsonPayLoad = "{\"pregunta\": " + String(pregunta) + ", \"respuesta\": \"" + respuesta + "\"}";
+    int httpResponseCode = http.POST(jsonPayLoad);
 
-    if (httpResponseCode > 0) {
-      String response = http.getString();
+    if (httpResponseCode > 0)
+    {
+      Serial.print("HTTP Response code: ");
       Serial.println(httpResponseCode);
-      Serial.println(response);
-    } else {
-      Serial.print("Error en el envio POST: ");
+
+      String payload = http.getString();
+      Serial.print("Respuesta: ");
+      Serial.println(payload);
+    }
+    else
+    {
+      Serial.print("Error code: ");
       Serial.println(httpResponseCode);
     }
     http.end();
-  } else {
+  }
+  else
+  {
     Serial.println("Desconectado de WiFi");
   }
 }
 
-void mostrarResultados() {
+void mostrarResultados()
+{
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Examen Completo");
   delay(2000);
 
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 10; i++)
+  {
     Serial.print("Pregunta ");
     Serial.print(i + 1);
     Serial.print(": ");

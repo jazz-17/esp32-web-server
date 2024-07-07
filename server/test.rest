@@ -1,0 +1,13 @@
+
+###
+GET http://localhost:3000/examen/resultados
+
+###
+POST http://localhost:3000/examen/guardar-respuesta
+Content-Type: application/json
+
+{
+    "pregunta": "test",
+    "respuesta": "A"
+}
+###

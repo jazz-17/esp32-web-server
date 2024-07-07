@@ -144,7 +144,7 @@ void findMyMACs()
                             WiFiClient client;
                             HTTPClient http;
                             String serverIP = SERVER_IP;
-                            String serverPath = "http://" + serverIP + "/ingresar-asistencia";
+                            String serverPath = "http://" + serverIP + "/asistencia/ingresar";
                             http.begin(client, serverPath.c_str());
                             http.addHeader("Content-Type", "application/json");
 
