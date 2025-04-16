@@ -1,247 +1,198 @@
-// #include "mac_sniffer.h"
-#include "network_config.h"
-
-// #define LED 2
-
-// void setup()
-// {
-//     Serial.begin(115200);
-//     pinMode(LED, OUTPUT);
-//     digitalWrite(LED, LOW);
-
-//     setupMacSniffer();
-
-//     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-//     Serial.println("iniciando");
-//     Serial.println("Escaneando MACs...");
-// }
-
-// bool isConnected = false;
-// void loop()
-// {
-
-//     /**** wifi code***/
-//     if (WiFi.status() == WL_CONNECTED && !isConnected)
-//     {
-//         Serial.print("Conectado a la red WiFi: ");
-//         Serial.println(WIFI_SSID);
-//         digitalWrite(LED, HIGH);
-//         isConnected = true;
-//     }
-//     else if (WiFi.status() != WL_CONNECTED && isConnected)
-//     {
-//         Serial.println("Desconectado de la red WiFi");
-//         digitalWrite(LED, LOW);
-//         isConnected = false;
-//     }
-
-//     /****mac_sniffer code****/
-//     // if (channel > 14)
-//     //     channel = 1;
-//     //esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
-//     esp_goto_next_channel();
-//     delay(1000);
-//     findMyMACs();
-//     //channel++;
-// }
-
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
+#include <esp_wifi.h> // For core wifi functions if needed directly
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+#include "config.h"         // Your configurations
+#include "sniffer.h"        // Sniffer functions and data structures
+#include "target_devices.h" // Target device list management
+#include "http_reporting.h" // HTTP reporting functions
 
-#define LED_BUILTIN 2
-#define BUTTON_A 33
-#define BUTTON_B 25
-#define BUTTON_C 26
-#define BUTTON_D 27
+bool isConnected = false;
+unsigned long lastReportTime = 0;
+unsigned long lastPruneTime = 0; // Timer for pruning old MACs
 
-void mostrarPregunta();
-void manejarPulsaciones();
-void registrarRespuesta(String respuesta);
-void enviarRespuesta(int pregunta, String respuesta);
-void mostrarResultados();
+// --- Button Configuration ---
+const int BUTTON_PIN = 13; // GPIO pin the button is connected to
 
-const char *ssid = "KIKI-1";
-const char *password = "andromeda_1708";
-// const char* serverName = "http://tu_dominio.com/guardar_respuesta.php";
-const char *serverName = "http://proyecto.test/guardar_respuesta.php";
+// --- Debounce Variables ---
+unsigned long lastDebounceTime = 0; // the last time the output pin was toggled
+unsigned long debounceDelay = 50;   // the debounce time in milliseconds; increase if you get multiple clicks
 
-const char *preguntas[] = {
-    "Pregunta 1",
-    "Pregunta 2",
-    "Pregunta 3",
-    "Pregunta 4",
-    "Pregunta 5",
-    "Pregunta 6",
-    "Pregunta 7",
-    "Pregunta 8",
-    "Pregunta 9",
-    "Pregunta 10"};
+// --- Button State Variables ---
+// We need to track the current debounced state and the state from the previous loop iteration
+int buttonState = HIGH;     // The current *debounced* state of the button (HIGH = not pressed with internal pullup)
+int lastButtonState = HIGH; // The previous *debounced* reading from the input pin
 
-const char *opciones[] = {
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D",
-    "A B C D"};
-
-int preguntaActual = 0;
-String respuestas[10];
+void check_myButton();
+void setup_myButton();
 
 void setup()
 {
   Serial.begin(115200);
-  pinMode(LED_BUILTIN, OUTPUT);
-  lcd.init();
-  lcd.backlight();
-  pinMode(BUTTON_A, INPUT_PULLUP);
-  pinMode(BUTTON_B, INPUT_PULLUP);
-  pinMode(BUTTON_C, INPUT_PULLUP);
-  pinMode(BUTTON_D, INPUT_PULLUP);
+  Serial.println("\n\n--- ESP32 MAC Sniffer & Reporter ---");
 
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW); // LED OFF initially
+
+  setup_myButton();          // Call the button setup
+  initializeTargetDevices(); // Load the list of devices we care about
+  setupSniffer();
+
+  // --- Connect to WiFi First ---
+  Serial.print("Connecting to ");
+  Serial.println(WIFI_SSID);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < WIFI_CONNECT_TIMEOUT)
   {
+    Serial.print(".");
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Blink LED during connection attempt
     delay(500);
-    Serial.println("Conectando a WiFi...");
   }
-  Serial.println("Conectado a WiFi");
-  digitalWrite(LED_BUILTIN, HIGH);
 
-  mostrarPregunta();
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    isConnected = true;
+    Serial.println("\nWiFi connected!");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Connected on Channel: ");
+    int currentChannel = WiFi.channel();
+    Serial.println(currentChannel);
+    digitalWrite(LED_PIN, HIGH); // LED ON solid when connected
+  }
+  else
+  {
+    isConnected = false;
+    Serial.println("\nFailed to connect to WiFi.");
+    digitalWrite(LED_PIN, LOW); // LED OFF
+    // Sniffer will not be started. Maybe enter a deep sleep or retry?
+    Serial.println("Cannot start sniffer without WiFi connection. System idle.");
+  }
+
+  lastReportTime = millis();
+  lastPruneTime = millis();
 }
 
 void loop()
 {
-  //manejarPulsaciones();
-  enviarRespuesta(preguntaActual, "A");
-  delay(5000);
-  preguntaActual++;
-}
+  check_myButton(); // Call the button check function repeatedly
 
-void mostrarPregunta()
-{
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(preguntas[preguntaActual]);
-  lcd.setCursor(0, 1);
-  lcd.print(opciones[preguntaActual]);
-}
+  unsigned long currentTime = millis();
 
-void manejarPulsaciones()
-{
-  if (digitalRead(BUTTON_A) == LOW)
+  // --- Handle WiFi Connection State Changes ---
+  if (WiFi.status() != WL_CONNECTED && isConnected)
   {
-    registrarRespuesta("A");
+    Serial.println("WiFi disconnected!");
+    digitalWrite(LED_PIN, LOW);
+    isConnected = false;
+    stopSniffer(); // Stop sniffing if connection lost
+                   // Add reconnection logic here if desired
   }
-  else if (digitalRead(BUTTON_B) == LOW)
+  else if (WiFi.status() == WL_CONNECTED && !isConnected)
   {
-    registrarRespuesta("B");
+    // This handles reconnection after a drop
+    Serial.println("WiFi reconnected!");
+    isConnected = true;
+    digitalWrite(LED_PIN, HIGH);
   }
-  else if (digitalRead(BUTTON_C) == LOW)
+
+  // --- Periodic Tasks (Non-Blocking) ---
+  esp_goto_next_channel();
+  delay(1000);
+
+  // 1. Check for and report target devices
+  if (isConnected && (currentTime - lastReportTime >= REPORT_INTERVAL))
   {
-    registrarRespuesta("C");
-  }
-  else if (digitalRead(BUTTON_D) == LOW)
-  {
-    registrarRespuesta("D");
-  }
-}
+    lastReportTime = currentTime;
+    if (DEBUG_MODE)
+      Serial.println("Checking for target devices to report...");
 
-void registrarRespuesta(String respuesta)
-{
-  Serial.print("Respuesta ");
-  Serial.print(respuesta);
-  Serial.println(" seleccionada");
-  respuestas[preguntaActual] = respuesta;
-
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Respuesta: ");
-  lcd.print(respuesta);
-  lcd.setCursor(0, 1);
-  lcd.print("Confirmado");
-  delay(2000);
-
-  enviarRespuesta(preguntaActual + 1, respuesta);
-
-  preguntaActual++;
-  if (preguntaActual < 10)
-  {
-    mostrarPregunta();
-  }
-  else
-  {
-    mostrarResultados();
-  }
-}
-
-void enviarRespuesta(int pregunta, String respuesta)
-{
-  if (WiFi.status() == WL_CONNECTED)
-  {
-    Serial.println("Registrando asistencia...");
-    WiFiClient client;
-    HTTPClient http;
-    String serverIP = SERVER_IP;
-    String serverPath = "http://" + serverIP + "/examen/guardar-respuesta";
-    http.begin(client, serverPath.c_str());
-    http.addHeader("Content-Type", "application/json");
-
-    String jsonPayLoad = "{\"pregunta\": " + String(pregunta) + ", \"respuesta\": \"" + respuesta + "\"}";
-    int httpResponseCode = http.POST(jsonPayLoad);
-
-    if (httpResponseCode > 0)
+    const std::vector<TargetDevice> &targets = getTargetDevices();
+    for (const auto &target : targets)
     {
-      Serial.print("HTTP Response code: ");
-      Serial.println(httpResponseCode);
 
-      String payload = http.getString();
-      Serial.print("Respuesta: ");
-      Serial.println(payload);
+      // Check the flag set by the sniffer callback via markTargetDeviceForReporting
+      if (target.reportPending && !target.registered)
+      {
+        Serial.print("Alumno ");
+        Serial.print(target.name);
+        Serial.println(" detectado...");
+        if (!DEBUG_MODE)
+        {
+          reportTargetDevice(target.macAddress, target.name);
+        }
+        // Attempt to send HTTP report (function now handles WiFi check too)
+        // Note: reportTargetDevice now calls markTargetDeviceReported *only* on success.
+      }
     }
-    else
-    {
-      Serial.print("Error code: ");
-      Serial.println(httpResponseCode);
-    }
-    http.end();
   }
-  else
-  {
-    Serial.println("Desconectado de WiFi");
+
+  // 2. Prune old MAC addresses from the detected list
+  if (MAC_EXPIRY_TIME > 0 && (currentTime - lastPruneTime >= MAC_EXPIRY_TIME))
+  { // Prune at least as often as expiry time
+    lastPruneTime = currentTime;
+    pruneOldMacs();
   }
+
+  // --- Keep loop responsive ---
+  // Add delay(1) or yield() if you experience watchdog resets with very busy loops,
+  // but generally avoid blocking delays. The sniffer callback runs in the background.
+  // delay(1);
 }
 
-void mostrarResultados()
+// --- Setup ---
+void setup_myButton()
 {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Examen Completo");
-  delay(2000);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  for (int i = 0; i < 10; i++)
+  Serial.println("Button ready. Press the button connected to GPIO " + String(BUTTON_PIN));
+  buttonState = digitalRead(BUTTON_PIN);
+  lastButtonState = buttonState;
+}
+void check_myButton()
+{
+
+  // 1. Read the current physical state of the button
+  int reading = digitalRead(BUTTON_PIN);
+
+  // 2. Check if the physical state has changed (potential bounce or real press/release)
+  // If it differs from the last reading, reset the debounce timer
+  if (reading != lastButtonState)
   {
-    Serial.print("Pregunta ");
-    Serial.print(i + 1);
-    Serial.print(": ");
-    Serial.print(preguntas[i]);
-    Serial.print(" - Respuesta: ");
-    Serial.println(respuestas[i]);
-    delay(1000);
+    lastDebounceTime = millis();
   }
 
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Resultados en ");
-  lcd.setCursor(0, 1);
-  lcd.print("Serial");
+  // 3. Check if enough time has passed since the last potential state change
+  if ((millis() - lastDebounceTime) > debounceDelay)
+  {
+    // Whatever the reading is at this point, it's considered stable (debounced)
+
+    // 4. Check if the stable state is different from the previously accepted debounced state
+    if (reading != buttonState)
+    {
+      buttonState = reading; // Update the accepted debounced state
+
+      // 5. Perform action ONLY on the transition from HIGH to LOW (button pressed)
+      if (buttonState == LOW)
+      {
+        Serial.println("Button Pressed! (Single Action)");
+        // --- PUT YOUR SINGLE ACTION CODE HERE ---
+        // Example: blink an LED once, send one MQTT message, etc.
+        // digitalWrite(LED_BUILTIN, HIGH);
+        // delay(100); // Short delay for visual feedback if blinking LED
+        // digitalWrite(LED_BUILTIN, LOW);
+        // ----------------------------------------
+      }
+      else
+      {
+        // Optional: Action when the button is released (transition from LOW to HIGH)
+        // Serial.println("Button Released!");
+      }
+    }
+  }
+
+  // 6. Save the current physical reading for the next loop iteration
+  lastButtonState = reading;
 }
